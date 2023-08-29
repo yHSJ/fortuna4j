@@ -11,13 +11,10 @@ import com.bloxbean.cardano.client.backend.ogmios.KupmiosBackendService;
 import com.bloxbean.cardano.client.common.model.Network;
 import com.bloxbean.cardano.client.common.model.Networks;
 import com.bloxbean.cardano.client.function.helper.SignerProviders;
-import com.bloxbean.cardano.client.plutus.spec.BytesPlutusData;
-import com.bloxbean.cardano.client.plutus.spec.PlutusData;
-import com.bloxbean.cardano.client.plutus.spec.PlutusV2Script;
+import com.bloxbean.cardano.client.plutus.spec.*;
 import com.bloxbean.cardano.client.quicktx.QuickTxBuilder;
 import com.bloxbean.cardano.client.quicktx.ScriptTx;
 import com.bloxbean.cardano.client.transaction.spec.Asset;
-import com.bloxbean.cardano.client.transaction.spec.Transaction;
 import com.bloxbean.cardano.client.util.Tuple;
 
 import java.math.BigInteger;
@@ -51,6 +48,7 @@ public class Miner {
         this.validatorOutRef = fetchValidatorOutRef();
 
         this.currentState = new State(this.validatorOutRef.getInlineDatum());
+        System.out.println(currentState.toConstrPlutusData().serializeToHex());
     }
 
     public void start() {
@@ -80,11 +78,8 @@ public class Miner {
 
 
         State newState = buildState(targetState, realTimeNow);
-        try {
-            buildAndSubmit(newState, nonce, realTimeNow);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        buildAndSubmit(newState, nonce, realTimeNow);
+
     }
 
     private State buildState(TargetState targetState, int realTimeNow) {
@@ -94,10 +89,12 @@ public class Miner {
                 currentState.getInterlinkStringArray()
         );
 
+        System.out.println("Current State Epoch Time: " + currentState.getEpochTime());
         BigInteger epochTime = currentState.getEpochTime()
-                                           .add(BigInteger.valueOf(90000 + realTimeNow))
+                                           .add(BigInteger.valueOf(90000 + realTimeNow * 1000L))
                                            .subtract(currentState.getCurrentPosixTime());
 
+        System.out.println("New Epoch Time: " + epochTime);
         Difficulty difficulty = targetState.getDifficulty();
 
         if (currentState.getBlockNumber().mod(BigInteger.valueOf(2016)).equals(BigInteger.ZERO) &&
@@ -126,25 +123,36 @@ public class Miner {
         PlutusV2Script script = PlutusV2Script.builder().cborHex(GENESIS.getValidator()).build();
         Asset mintAsset = new Asset("TUNA", BigInteger.valueOf(5_000_000_000L));
 
+        System.out.println(state.toConstrPlutusData().serializeToHex());
+        System.out.println(BytesPlutusData.of(nonce).serializeToHex());
+        System.out.println(PlutusData.unit().serializeToHex());
+
+        List<PlutusData> plutusDataList = List.of(BytesPlutusData.of(nonce));
+        ListPlutusData plutusData = ListPlutusData.builder().plutusDataList(plutusDataList).build();
+        ConstrPlutusData redeemer = ConstrPlutusData.builder().data(plutusData).build();
+
         ScriptTx stateTx = new ScriptTx()
-                .collectFrom(utxos, BytesPlutusData.of(nonce))
+                .collectFrom(utxos, redeemer)
+                .readFrom(validatorOutRef)
                 .payToContract(
                         GENESIS.getValidatorAddress(),
                         List.of(Amount.asset(GENESIS.getValidatorHash() + toHex("lord tuna"), 1)),
                         state.toConstrPlutusData()
                 ).mintAsset(script, mintAsset, PlutusData.unit(), ACCOUNT.baseAddress())
-                .readFrom(validatorOutRef);
+                .attachSpendingValidator(script)
+                .withChangeAddress(ACCOUNT.baseAddress());
 
         QuickTxBuilder quickTxBuilder = new QuickTxBuilder(KUPMIOS);
-        Transaction tx = quickTxBuilder
+        Result<String> tx = quickTxBuilder
                 .compose(stateTx)
                 .withSigner(SignerProviders.signerFrom(ACCOUNT))
                 .feePayer(ACCOUNT.baseAddress())
                 .validFrom(validityStart)
                 .validTo(validityStart + 180)
-                .build();
-
-        tx.getBody().getOutputs().forEach(System.out::println);
+                .postBalanceTx((context, txn) -> {
+                    txn.getWitnessSet().getPlutusV2Scripts().clear();
+                })
+                .completeAndWait(System.out::println);
     }
 
     private Difficulty adjustDifficulty(BigInteger epochTime) {
