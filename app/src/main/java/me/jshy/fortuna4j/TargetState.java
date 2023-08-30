@@ -14,7 +14,7 @@ import java.util.HexFormat;
 public class TargetState {
     private final BigInteger BLOCK_NUMBER;
     private final byte[] CURRENT_HASH;
-    private final BigInteger LEADING_ZEROES;
+    private final BigInteger LEADING_ZEROS;
     private final BigInteger DIFFICULTY_NUMBER;
     private final BigInteger EPOCH_TIME;
     private String nonce;
@@ -26,7 +26,7 @@ public class TargetState {
         this.nonce = HexFormat.of().formatHex(nonce);
         BLOCK_NUMBER = initState.getBlockNumber();
         CURRENT_HASH = initState.getCurrentHash();
-        LEADING_ZEROES = initState.getLeadingZeroes();
+        LEADING_ZEROS = initState.getLeadingZeros();
         DIFFICULTY_NUMBER = initState.getDifficultyNumber();
         EPOCH_TIME = initState.getEpochTime();
     }
@@ -35,7 +35,7 @@ public class TargetState {
         this.nonce = HexFormat.of().formatHex(nonce);
         BLOCK_NUMBER = initState.getBlockNumber();
         CURRENT_HASH = initState.getCurrentHash();
-        LEADING_ZEROES = initState.getLeadingZeroes();
+        LEADING_ZEROS = initState.getLeadingZeros();
         DIFFICULTY_NUMBER = initState.getDifficultyNumber();
         EPOCH_TIME = initState.getEpochTime();
     }
@@ -50,10 +50,10 @@ public class TargetState {
 
         int currentIndex = 0;
 
-        while (halfDifficulty.getLeadingZeroes().compareTo(getDifficulty().getLeadingZeroes()) < 0 ||
-               (halfDifficulty.getLeadingZeroes().compareTo(getDifficulty().getLeadingZeroes()) == 0 &&
+        while (halfDifficulty.getLeadingZeros().compareTo(getDifficulty().getLeadingZeros()) < 0 ||
+               (halfDifficulty.getLeadingZeros().compareTo(getDifficulty().getLeadingZeros()) == 0 &&
                 halfDifficulty.getDifficultyNumber().compareTo(getDifficulty().getDifficultyNumber()) > 0)) {
-            if (currentIndex < interlink.size()) {
+            if (currentIndex < previousInterlink.size()) {
                 interlink.set(currentIndex, toHashString());
             } else {
                 interlink.add(toHashString());
@@ -68,6 +68,7 @@ public class TargetState {
 
     public Difficulty getDifficulty() {
         if (difficulty != null) {
+            System.out.println("Returning cached difficulty");
             return difficulty;
         }
 
@@ -86,10 +87,10 @@ public class TargetState {
                     leadingZeros += 1;
                     difficultyNumber += chr * 4096;
                     difficultyNumber += hashDigest[i + 1] * 16;
-                    difficultyNumber += (hashDigest[i + 2] & 0xFF) / 16;
+                    difficultyNumber += Math.floor(hashDigest[i + 2] / 16.0);
                 } else {
                     difficultyNumber += chr * 256;
-                    difficultyNumber += hashDigest[i + 1] & 0xFF;
+                    difficultyNumber += hashDigest[i + 1];
                 }
 
                 difficulty = new Difficulty(BigInteger.valueOf(leadingZeros), BigInteger.valueOf(difficultyNumber));
@@ -98,6 +99,7 @@ public class TargetState {
                 leadingZeros += 2;
             }
         }
+
         difficulty = new Difficulty(BigInteger.valueOf(32), BigInteger.ZERO);
         return difficulty;
     }
@@ -134,7 +136,7 @@ public class TargetState {
                 BytesPlutusData.of(nonce),
                 BigIntPlutusData.of(BLOCK_NUMBER),
                 BytesPlutusData.of(CURRENT_HASH),
-                BigIntPlutusData.of(LEADING_ZEROES),
+                BigIntPlutusData.of(LEADING_ZEROS),
                 BigIntPlutusData.of(DIFFICULTY_NUMBER),
                 BigIntPlutusData.of(EPOCH_TIME)
         );
@@ -147,9 +149,9 @@ public class TargetState {
             getDifficulty();
         }
 
-        return difficulty.getLeadingZeroes().compareTo(LEADING_ZEROES) > 0 || (
-                difficulty.getLeadingZeroes().equals(LEADING_ZEROES) &&
-                difficulty.getDifficultyNumber().compareTo(DIFFICULTY_NUMBER) > 0);
+        return difficulty.getLeadingZeros().compareTo(LEADING_ZEROS) > 0 || (
+                difficulty.getLeadingZeros().equals(LEADING_ZEROS) &&
+                difficulty.getDifficultyNumber().compareTo(DIFFICULTY_NUMBER) < 0);
     }
 
     public BigInteger getBlockNumber() {
@@ -160,8 +162,8 @@ public class TargetState {
         return CURRENT_HASH;
     }
 
-    public BigInteger getLeadingZeroes() {
-        return LEADING_ZEROES;
+    public BigInteger getLeadingZeros() {
+        return LEADING_ZEROS;
     }
 
     public BigInteger getDifficultyNumber() {

@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 public class State {
     private final BigInteger BLOCK_NUMBER;
     private final byte[] CURRENT_HASH;
-    private final BigInteger LEADING_ZEROES;
+    private final BigInteger LEADING_ZEROS;
     private final BigInteger DIFFICULTY_NUMBER;
     private final BigInteger EPOCH_TIME;
     private final BigInteger CURRENT_POSIX_TIME;
@@ -30,7 +30,7 @@ public class State {
 
             BLOCK_NUMBER = getBlockNumberFromConstrData(constrPlutusData);
             CURRENT_HASH = getCurrentHashFromConstrData(constrPlutusData);
-            LEADING_ZEROES = getLeadingZeroesFromConstrData(constrPlutusData);
+            LEADING_ZEROS = getLeadingZerosFromConstrData(constrPlutusData);
             DIFFICULTY_NUMBER = getDifficultyNumberFromConstrData(constrPlutusData);
             EPOCH_TIME = getEpochTimeFromConstrData(constrPlutusData);
             CURRENT_POSIX_TIME = getCurrentPosixTimeFromConstrData(constrPlutusData);
@@ -46,7 +46,7 @@ public class State {
     public State(StateBuilder builder) {
         this.BLOCK_NUMBER = builder.blockNumber;
         this.CURRENT_HASH = builder.currentHash;
-        this.LEADING_ZEROES = builder.leadingZeroes;
+        this.LEADING_ZEROS = builder.leadingZeros;
         this.DIFFICULTY_NUMBER = builder.difficultyNumber;
         this.EPOCH_TIME = builder.epochTime;
         this.CURRENT_POSIX_TIME = builder.currentPosixTime;
@@ -59,7 +59,7 @@ public class State {
     }
 
     public Difficulty getDifficulty() {
-        return new Difficulty(LEADING_ZEROES, DIFFICULTY_NUMBER);
+        return new Difficulty(LEADING_ZEROS, DIFFICULTY_NUMBER);
     }
 
     private BigInteger getBlockNumberFromConstrData(ConstrPlutusData plutusData) {
@@ -72,7 +72,7 @@ public class State {
         return data.getValue();
     }
 
-    private BigInteger getLeadingZeroesFromConstrData(ConstrPlutusData plutusData) {
+    private BigInteger getLeadingZerosFromConstrData(ConstrPlutusData plutusData) {
         BigIntPlutusData data = (BigIntPlutusData) plutusData.getData().getPlutusDataList().get(2);
         return data.getValue();
     }
@@ -108,8 +108,8 @@ public class State {
         return CURRENT_HASH;
     }
 
-    public BigInteger getLeadingZeroes() {
-        return LEADING_ZEROES;
+    public BigInteger getLeadingZeros() {
+        return LEADING_ZEROS;
     }
 
     public BigInteger getDifficultyNumber() {
@@ -144,7 +144,7 @@ public class State {
         ListPlutusData plutusDataList = ListPlutusData.of(
                 BigIntPlutusData.of(BLOCK_NUMBER),
                 BytesPlutusData.of(CURRENT_HASH),
-                BigIntPlutusData.of(LEADING_ZEROES),
+                BigIntPlutusData.of(LEADING_ZEROS),
                 BigIntPlutusData.of(DIFFICULTY_NUMBER),
                 BigIntPlutusData.of(EPOCH_TIME),
                 BigIntPlutusData.of(CURRENT_POSIX_TIME),
@@ -158,7 +158,7 @@ public class State {
     public static class StateBuilder {
         private BigInteger blockNumber;
         private byte[] currentHash;
-        private BigInteger leadingZeroes;
+        private BigInteger leadingZeros;
         private BigInteger difficultyNumber;
         private BigInteger epochTime;
         private BigInteger currentPosixTime;
@@ -175,8 +175,8 @@ public class State {
             return this;
         }
 
-        public StateBuilder setLeadingZeroes(BigInteger leadingZeroes) {
-            this.leadingZeroes = leadingZeroes;
+        public StateBuilder setLeadingZeros(BigInteger leadingZeros) {
+            this.leadingZeros = leadingZeros;
             return this;
         }
 

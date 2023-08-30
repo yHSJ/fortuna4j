@@ -11,7 +11,10 @@ import com.bloxbean.cardano.client.backend.ogmios.KupmiosBackendService;
 import com.bloxbean.cardano.client.common.model.Network;
 import com.bloxbean.cardano.client.common.model.Networks;
 import com.bloxbean.cardano.client.function.helper.SignerProviders;
-import com.bloxbean.cardano.client.plutus.spec.*;
+import com.bloxbean.cardano.client.plutus.spec.BytesPlutusData;
+import com.bloxbean.cardano.client.plutus.spec.ConstrPlutusData;
+import com.bloxbean.cardano.client.plutus.spec.PlutusData;
+import com.bloxbean.cardano.client.plutus.spec.PlutusV2Script;
 import com.bloxbean.cardano.client.quicktx.QuickTxBuilder;
 import com.bloxbean.cardano.client.quicktx.ScriptTx;
 import com.bloxbean.cardano.client.transaction.spec.Asset;
@@ -48,7 +51,7 @@ public class Miner {
         this.validatorOutRef = fetchValidatorOutRef();
 
         this.currentState = new State(this.validatorOutRef.getInlineDatum());
-        System.out.println(currentState.toConstrPlutusData().serializeToHex());
+        System.out.println("Current State: " + currentState.toConstrPlutusData().serializeToHex());
     }
 
     public void start() {
@@ -59,8 +62,8 @@ public class Miner {
         TargetState targetState = new TargetState(nonce, currentState);
         long timer = System.currentTimeMillis();
         while (true) {
-            if (System.currentTimeMillis() - timer > 30000) {
-                System.out.println("No proof found in 30 seconds. Updating state...");
+            if (System.currentTimeMillis() - timer > 5000) {
+                System.out.println("No proof found in 5 seconds. Updating state...");
                 updateState();
                 timer = System.currentTimeMillis();
                 continue;
@@ -74,28 +77,26 @@ public class Miner {
             incrementNonce(nonce);
             targetState = new TargetState(nonce, targetState);
         }
-        int realTimeNow = (int) Math.round(System.currentTimeMillis() / 1000.0) - 60;
 
+        int realTimeNow = (int) Math.round(System.currentTimeMillis() / 1000.0) - 60;
+        System.out.println(realTimeNow);
 
         State newState = buildState(targetState, realTimeNow);
-        buildAndSubmit(newState, nonce, realTimeNow);
+        buildAndSubmit(newState, nonce);
 
     }
 
     private State buildState(TargetState targetState, int realTimeNow) {
-
         ArrayList<String> interlink = targetState.calculateInterlink(
                 currentState.getDifficulty(),
                 currentState.getInterlinkStringArray()
         );
 
-        System.out.println("Current State Epoch Time: " + currentState.getEpochTime());
         BigInteger epochTime = currentState.getEpochTime()
                                            .add(BigInteger.valueOf(90000 + realTimeNow * 1000L))
                                            .subtract(currentState.getCurrentPosixTime());
 
-        System.out.println("New Epoch Time: " + epochTime);
-        Difficulty difficulty = targetState.getDifficulty();
+        Difficulty difficulty = currentState.getDifficulty();
 
         if (currentState.getBlockNumber().mod(BigInteger.valueOf(2016)).equals(BigInteger.ZERO) &&
             currentState.getBlockNumber().compareTo(BigInteger.ZERO) > 0) {
@@ -105,7 +106,7 @@ public class Miner {
         return State.builder()
                     .setBlockNumber(currentState.getBlockNumber().add(BigInteger.ONE))
                     .setCurrentHash(targetState.toHash())
-                    .setLeadingZeroes(difficulty.getLeadingZeroes())
+                    .setLeadingZeros(difficulty.getLeadingZeros())
                     .setDifficultyNumber(difficulty.getDifficultyNumber())
                     .setEpochTime(epochTime)
                     .setCurrentPosixTime(BigInteger.valueOf(90000 + realTimeNow))
@@ -114,23 +115,18 @@ public class Miner {
                     .build();
     }
 
-    private void buildAndSubmit(State state, byte[] nonce, int realTimeNow) {
-        int validityStart = realTimeNow - 1596491091 + 4924800;
-
-        System.out.println(validityStart);
+    private void buildAndSubmit(State state, byte[] nonce) {
+        long validityStart = getLatestSlot();
+        System.out.println("validFrom: " + validityStart);
+        System.out.println("validTo: " + (validityStart + 180));
         List<Utxo> utxos = getUtxos(ADDRESS.getAddress());
         utxos.add(validatorOutRef);
         PlutusV2Script script = PlutusV2Script.builder().cborHex(GENESIS.getValidator()).build();
         Asset mintAsset = new Asset("TUNA", BigInteger.valueOf(5_000_000_000L));
 
-        System.out.println(state.toConstrPlutusData().serializeToHex());
-        System.out.println(BytesPlutusData.of(nonce).serializeToHex());
-        System.out.println(PlutusData.unit().serializeToHex());
-
-        List<PlutusData> plutusDataList = List.of(BytesPlutusData.of(nonce));
-        ListPlutusData plutusData = ListPlutusData.builder().plutusDataList(plutusDataList).build();
-        ConstrPlutusData redeemer = ConstrPlutusData.builder().data(plutusData).build();
-
+        ConstrPlutusData redeemer = ConstrPlutusData.of(1, BytesPlutusData.of(nonce));
+        System.out.println("redeemer: " + redeemer.serializeToHex());
+        System.out.println("new state: " + state.toConstrPlutusData().serializeToHex());
         ScriptTx stateTx = new ScriptTx()
                 .collectFrom(utxos, redeemer)
                 .readFrom(validatorOutRef)
@@ -149,10 +145,7 @@ public class Miner {
                 .feePayer(ACCOUNT.baseAddress())
                 .validFrom(validityStart)
                 .validTo(validityStart + 180)
-                .postBalanceTx((context, txn) -> {
-                    txn.getWitnessSet().getPlutusV2Scripts().clear();
-                })
-                .completeAndWait(System.out::println);
+                .completeAndWait();
     }
 
     private Difficulty adjustDifficulty(BigInteger epochTime) {
@@ -225,6 +218,10 @@ public class Miner {
         }
 
         return request.getValue();
+    }
+
+    private long getLatestSlot() {
+        return 26709036;
     }
 
     public static class MinerBuilder {
